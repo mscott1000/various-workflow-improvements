@@ -1,12 +1,12 @@
 // ==UserScript==
-// @name         Codex - Compact Wider Interface + Text Blackout
+// @name         Codex - Compact Wider Interface + Blackout
 // @namespace    mason-codex-cleanup
-// @version      6.0
-// @description  Widens Codex, reduces wasted space, hides the ChatGPT header, and blacks out selected Codex text.
+// @version      5.2
+// @description  Widens Codex, reduces excess top spacing, hides the header only on the Codex home screen, and blacks out selected Codex text.
 // @match        https://chatgpt.com/*
 // @match        https://*.chatgpt.com/*
-// @grant        none
 // @run-at       document-idle
+// @grant        none
 // ==/UserScript==
 
 (function () {
@@ -30,24 +30,28 @@
     /*
      * MOVE CODEX UP
      *
-     * Higher number = less blank space above the composer.
+     * Reduces the blank area above the home-page composer.
      */
     const TOP_SHIFT_PX = 90;
 
 
     /*
-     * Maximum percentage of the browser width that Codex
-     * is allowed to occupy.
+     * Maximum percentage of the browser window that the
+     * widened Codex workspace may occupy.
      */
     const MAX_VIEWPORT_WIDTH = 0.92;
 
 
     /*
-     * TEXT TO BLACK OUT
+     * TEXT BLACKOUT
      */
     const TARGET_TEXT = 'What should we code next?';
 
-    const BLACKOUT_CLASS = 'tm-codex-blackout-text';
+    const BLACKOUT_CLASS =
+        'tm-codex-blackout-text';
+
+    const BLACKOUT_STYLE_ID =
+        'tm-codex-blackout-style';
 
 
 
@@ -57,44 +61,50 @@
 
     function installBlackoutCSS() {
 
-        if (document.getElementById('tm-codex-blackout-style')) {
+        if (
+            document.getElementById(
+                BLACKOUT_STYLE_ID
+            )
+        ) {
             return;
         }
 
 
-        const style = document.createElement('style');
+        const style =
+            document.createElement('style');
 
-        style.id = 'tm-codex-blackout-style';
+
+        style.id =
+            BLACKOUT_STYLE_ID;
+
 
         style.textContent = `
-
             .${BLACKOUT_CLASS} {
                 color: transparent !important;
                 background: #000 !important;
                 text-shadow: none !important;
-
                 border-radius: 0 !important;
 
                 user-select: none !important;
                 -webkit-user-select: none !important;
             }
 
-
             .${BLACKOUT_CLASS} * {
                 color: transparent !important;
                 text-shadow: none !important;
             }
-
         `;
 
 
-        document.head.appendChild(style);
+        document.head.appendChild(
+            style
+        );
     }
 
 
 
     // =========================================================
-    // BLACK OUT AN ELEMENT
+    // BLACK OUT ONE ELEMENT
     // =========================================================
 
     function blackoutElement(el) {
@@ -105,8 +115,9 @@
 
 
         if (
-            el.classList &&
-            el.classList.contains(BLACKOUT_CLASS)
+            el.classList?.contains(
+                BLACKOUT_CLASS
+            )
         ) {
             return;
         }
@@ -118,8 +129,8 @@
 
 
         /*
-         * Preserve the physical size of the text, but make the
-         * visible result a solid black block.
+         * Preserve the element's normal dimensions,
+         * but show a solid black block instead of text.
          */
 
         el.style.setProperty(
@@ -146,10 +157,14 @@
 
 
     // =========================================================
-    // FIND + BLACK OUT TARGET TEXT
+    // FIND + BLACK OUT:
+    //
+    // "What should we code next?"
     // =========================================================
 
-    function blackoutTargetText(root = document.body) {
+    function blackoutTargetText(
+        root = document.body
+    ) {
 
         if (!root) {
             return;
@@ -165,7 +180,9 @@
 
                         if (
                             !node.nodeValue ||
-                            !node.nodeValue.includes(TARGET_TEXT)
+                            !node.nodeValue.includes(
+                                TARGET_TEXT
+                            )
                         ) {
                             return NodeFilter.FILTER_REJECT;
                         }
@@ -181,7 +198,8 @@
 
 
                         const tag =
-                            parent.tagName?.toLowerCase();
+                            parent.tagName
+                                ?.toLowerCase();
 
 
                         if (
@@ -204,7 +222,9 @@
         const matches = [];
 
 
-        while (walker.nextNode()) {
+        while (
+            walker.nextNode()
+        ) {
 
             matches.push(
                 walker.currentNode
@@ -213,20 +233,25 @@
 
 
 
-        for (const textNode of matches) {
+        for (
+            const textNode of matches
+        ) {
 
             const parent =
                 textNode.parentElement;
 
 
             /*
-             * If the element contains ONLY the target phrase,
+             * If the entire element is just:
+             *
+             * "What should we code next?"
+             *
              * black out the whole element.
              */
-
             if (
                 parent &&
-                parent.textContent.trim() === TARGET_TEXT
+                parent.textContent.trim() ===
+                    TARGET_TEXT
             ) {
 
                 blackoutElement(
@@ -239,10 +264,8 @@
 
 
             /*
-             * Otherwise, only replace the matching phrase.
-             *
-             * This protects us if Codex later puts the phrase
-             * inside a longer sentence.
+             * If the target phrase is embedded inside
+             * some longer text, black out only the target.
              */
 
             const parts =
@@ -303,7 +326,10 @@
 
 
         // -----------------------------------------------------
-        // INPUT / TEXTAREA PLACEHOLDER FALLBACK
+        // PLACEHOLDER FALLBACK
+        //
+        // If Codex uses the phrase as a textarea/input
+        // placeholder instead of ordinary text.
         // -----------------------------------------------------
 
         document
@@ -318,7 +344,6 @@
                 ) {
 
                     field.placeholder = '';
-
 
                     field.style.setProperty(
                         'background',
@@ -346,7 +371,6 @@
         for (const el of candidates) {
 
             const text = [
-
                 el.getAttribute(
                     'placeholder'
                 ),
@@ -356,7 +380,6 @@
                 ),
 
                 el.textContent
-
             ]
                 .filter(Boolean)
                 .join(' ')
@@ -388,12 +411,11 @@
 
 
     // =========================================================
-    // FIND MAIN CODEX WORKSPACE
+    // FIND THE MAIN CODEX WORKSPACE
     //
-    // Diagnostic previously identified:
+    // Diagnostic identified the home wrapper as:
     //
-    //     div.z-0.mx-auto
-    //
+    // div.z-0.mx-auto
     // =========================================================
 
     function findWorkspace() {
@@ -403,7 +425,6 @@
 
 
         if (!composer) {
-
             return null;
         }
 
@@ -443,7 +464,7 @@
 
 
     // =========================================================
-    // ADJUST CODEX WORKSPACE
+    // WIDEN + MOVE THE CODEX HOME WORKSPACE
     // =========================================================
 
     function adjustWorkspace() {
@@ -453,18 +474,18 @@
 
 
         if (!workspace) {
-
             return;
         }
 
 
 
         // -----------------------------------------------------
-        // REMEMBER ORIGINAL WIDTH
+        // Remember original width once.
         // -----------------------------------------------------
 
         if (
-            !workspace.dataset.codexOriginalWidth
+            !workspace.dataset
+                .codexOriginalWidth
         ) {
 
             const originalWidth =
@@ -473,7 +494,8 @@
                     .width;
 
 
-            workspace.dataset.codexOriginalWidth =
+            workspace.dataset
+                .codexOriginalWidth =
                 String(
                     originalWidth
                 );
@@ -483,7 +505,8 @@
 
         const originalWidth =
             parseFloat(
-                workspace.dataset.codexOriginalWidth
+                workspace.dataset
+                    .codexOriginalWidth
             );
 
 
@@ -491,14 +514,13 @@
             !originalWidth ||
             isNaN(originalWidth)
         ) {
-
             return;
         }
 
 
 
         // -----------------------------------------------------
-        // CALCULATE NEW WIDTH
+        // Calculate widened size.
         // -----------------------------------------------------
 
         const requestedWidth =
@@ -520,7 +542,7 @@
 
 
         // -----------------------------------------------------
-        // APPLY WIDTH
+        // Apply width.
         // -----------------------------------------------------
 
         workspace.style.setProperty(
@@ -560,7 +582,7 @@
 
 
         // -----------------------------------------------------
-        // MOVE WORKSPACE UP
+        // Move the home workspace upward.
         // -----------------------------------------------------
 
         workspace.style.setProperty(
@@ -572,7 +594,7 @@
 
 
         // -----------------------------------------------------
-        // REMOVE OLD INNER WIDTH RESTRICTIONS
+        // Remove old inner 768px-style width limits.
         // -----------------------------------------------------
 
         const descendants =
@@ -581,69 +603,201 @@
             );
 
 
-        descendants.forEach(
-            el => {
+        descendants.forEach(el => {
 
-                const rect =
-                    el.getBoundingClientRect();
-
-
-                /*
-                 * Elements still approximately equal to the
-                 * original 768px width are allowed to expand
-                 * to the new workspace width.
-                 */
-
-                if (
-                    rect.width >=
-                        originalWidth - 5 &&
-
-                    rect.width <=
-                        originalWidth + 5
-                ) {
-
-                    el.style.setProperty(
-                        'max-width',
-                        '100%',
-                        'important'
-                    );
+            const rect =
+                el.getBoundingClientRect();
 
 
-                    el.style.setProperty(
-                        'width',
-                        '100%',
-                        'important'
-                    );
-                }
+            if (
+                rect.width >=
+                    originalWidth - 5 &&
+
+                rect.width <=
+                    originalWidth + 5
+            ) {
+
+                el.style.setProperty(
+                    'max-width',
+                    '100%',
+                    'important'
+                );
+
+
+                el.style.setProperty(
+                    'width',
+                    '100%',
+                    'important'
+                );
             }
+        });
+    }
+
+
+
+    // =========================================================
+    // DETERMINE WHETHER THIS IS THE CODEX HOME SCREEN
+    //
+    // Header hiding happens ONLY if we're confident this is
+    // the task-list/home page.
+    //
+    // Active coding tasks fail safe: header remains visible.
+    // =========================================================
+
+    function isCodexHomeScreen() {
+
+        const bodyText =
+            (
+                document.body
+                    ?.innerText || ''
+            )
+                .toLowerCase();
+
+
+
+        // -----------------------------------------------------
+        // HOME COMPOSER
+        // -----------------------------------------------------
+
+        const candidates =
+            document.querySelectorAll(
+                'textarea, input, [contenteditable="true"], [role="textbox"]'
+            );
+
+
+        let hasDescribeTaskComposer =
+            false;
+
+
+        for (const el of candidates) {
+
+            const text = [
+                el.getAttribute(
+                    'placeholder'
+                ),
+
+                el.getAttribute(
+                    'aria-label'
+                ),
+
+                el.textContent
+            ]
+                .filter(Boolean)
+                .join(' ')
+                .toLowerCase();
+
+
+            if (
+                text.includes(
+                    'describe a task'
+                )
+            ) {
+
+                hasDescribeTaskComposer =
+                    true;
+
+                break;
+            }
+        }
+
+
+
+        // -----------------------------------------------------
+        // HOME NAVIGATION
+        // -----------------------------------------------------
+
+        const hasHomeNavigation =
+            bodyText.includes(
+                'tasks'
+            ) &&
+            bodyText.includes(
+                'archive'
+            );
+
+
+
+        // -----------------------------------------------------
+        // SIGNS THAT AN ACTIVE TASK IS OPEN
+        // -----------------------------------------------------
+
+        const hasTaskTabs =
+            bodyText.includes(
+                'diff'
+            ) &&
+            bodyText.includes(
+                'logs'
+            );
+
+
+        const hasTaskReplyComposer =
+            bodyText.includes(
+                'request changes or ask a question'
+            );
+
+
+        const looksLikeActiveTask =
+            hasTaskTabs ||
+            hasTaskReplyComposer;
+
+
+
+        return (
+            hasDescribeTaskComposer &&
+            hasHomeNavigation &&
+            !looksLikeActiveTask
         );
     }
 
 
 
     // =========================================================
-    // HIDE CHATGPT TOP HEADER
+    // HEADER MANAGEMENT
     //
-    // Uses the geometry-based method that worked reliably.
+    // HOME:
+    //     hidden
+    //
+    // ACTIVE TASK:
+    //     visible
     // =========================================================
 
-    function hideHeader() {
+    let hiddenHeader = null;
+
+
+
+    function restoreHeader() {
+
+        if (
+            hiddenHeader &&
+            hiddenHeader.isConnected
+        ) {
+
+            /*
+             * Remove ONLY the property this script added.
+             */
+
+            hiddenHeader.style
+                .removeProperty(
+                    'display'
+                );
+        }
+
+
+        hiddenHeader = null;
+    }
+
+
+
+    function findTopHeader() {
 
         /*
-         * These coordinates sit inside the ChatGPT header
-         * near the upper-left corner.
+         * Coordinates inside the ordinary ChatGPT
+         * top-left header.
          */
-
         const samplePoints = [
-
             [25, 25],
-
             [60, 25],
-
             [120, 25]
-
         ];
-
 
 
         for (
@@ -658,11 +812,6 @@
                 );
 
 
-            /*
-             * Start with whatever exists at that screen position
-             * and walk upward until we find the full header row.
-             */
-
             while (
                 el &&
                 el !== document.body &&
@@ -673,30 +822,20 @@
                     el.getBoundingClientRect();
 
 
-
                 const startsAtTop =
-
                     rect.top >= -5 &&
-
                     rect.top <= 8;
 
 
-
                 const headerSized =
-
                     rect.height >= 35 &&
-
                     rect.height <= 90;
 
 
-
                 const spansScreen =
-
                     rect.width >=
-
                     window.innerWidth *
                     0.90;
-
 
 
                 if (
@@ -705,14 +844,7 @@
                     spansScreen
                 ) {
 
-                    el.style.setProperty(
-                        'display',
-                        'none',
-                        'important'
-                    );
-
-
-                    return;
+                    return el;
                 }
 
 
@@ -720,31 +852,113 @@
                     el.parentElement;
             }
         }
+
+
+        return null;
+    }
+
+
+
+    function manageHeader() {
+
+        /*
+         * SAFETY RULE:
+         *
+         * Unless this is definitely the Codex HOME page,
+         * make sure the full header is restored.
+         */
+
+        if (
+            !isCodexHomeScreen()
+        ) {
+
+            restoreHeader();
+
+            return;
+        }
+
+
+
+        /*
+         * Already hidden.
+         *
+         * Do not search underneath it and accidentally
+         * identify some other top-screen element.
+         */
+
+        if (
+            hiddenHeader &&
+            hiddenHeader.isConnected
+        ) {
+
+            return;
+        }
+
+
+        hiddenHeader = null;
+
+
+
+        const header =
+            findTopHeader();
+
+
+        if (!header) {
+            return;
+        }
+
+
+        hiddenHeader =
+            header;
+
+
+        header.style.setProperty(
+            'display',
+            'none',
+            'important'
+        );
     }
 
 
 
     // =========================================================
-    // APPLY EVERYTHING
+    // APPLY ALL CUSTOMIZATIONS
     // =========================================================
 
     function applyTweaks() {
 
+        /*
+         * 1. Ensure blackout CSS exists.
+         */
         installBlackoutCSS();
 
-        hideHeader();
 
+        /*
+         * 2. Hide/restore header depending on page.
+         */
+        manageHeader();
+
+
+        /*
+         * 3. Widen and reposition home workspace.
+         */
         adjustWorkspace();
 
+
+        /*
+         * 4. Black out:
+         *
+         *    "What should we code next?"
+         */
         blackoutTargetText();
     }
 
 
 
     // =========================================================
-    // INITIAL PAGE LOAD
+    // INITIAL LOAD
     //
-    // Codex renders in several stages.
+    // Codex renders in stages.
     // =========================================================
 
     setTimeout(
@@ -773,14 +987,14 @@
 
 
     // =========================================================
-    // REACT / CODEX MUTATION WATCHER
+    // REACT / CODEX REDRAWS
     //
-    // One observer handles BOTH:
+    // One observer handles:
     //
-    // - interface layout
-    // - blackout text
-    //
-    // This avoids running two separate Tampermonkey observers.
+    // - home/task navigation
+    // - header restore/hide
+    // - width changes
+    // - blackout text appearing dynamically
     // =========================================================
 
     let updateTimer;
@@ -806,20 +1020,16 @@
     observer.observe(
         document.body,
         {
-
             childList: true,
-
             subtree: true,
-
             characterData: true
-
         }
     );
 
 
 
     // =========================================================
-    // HANDLE BROWSER RESIZING
+    // BROWSER RESIZE
     // =========================================================
 
     window.addEventListener(
