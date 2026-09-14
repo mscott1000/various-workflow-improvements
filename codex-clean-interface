@@ -1,0 +1,842 @@
+// ==UserScript==
+// @name         Codex - Compact Wider Interface + Text Blackout
+// @namespace    mason-codex-cleanup
+// @version      6.0
+// @description  Widens Codex, reduces wasted space, hides the ChatGPT header, and blacks out selected Codex text.
+// @match        https://chatgpt.com/*
+// @match        https://*.chatgpt.com/*
+// @grant        none
+// @run-at       document-idle
+// ==/UserScript==
+
+(function () {
+    'use strict';
+
+
+    // =========================================================
+    // SETTINGS
+    // =========================================================
+
+    /*
+     * CODEX WIDTH
+     *
+     * 1.20 = 20% wider
+     * 1.40 = 40% wider
+     * 1.70 = 70% wider
+     */
+    const WIDTH_MULTIPLIER = 1.70;
+
+
+    /*
+     * MOVE CODEX UP
+     *
+     * Higher number = less blank space above the composer.
+     */
+    const TOP_SHIFT_PX = 90;
+
+
+    /*
+     * Maximum percentage of the browser width that Codex
+     * is allowed to occupy.
+     */
+    const MAX_VIEWPORT_WIDTH = 0.92;
+
+
+    /*
+     * TEXT TO BLACK OUT
+     */
+    const TARGET_TEXT = 'What should we code next?';
+
+    const BLACKOUT_CLASS = 'tm-codex-blackout-text';
+
+
+
+    // =========================================================
+    // BLACKOUT CSS
+    // =========================================================
+
+    function installBlackoutCSS() {
+
+        if (document.getElementById('tm-codex-blackout-style')) {
+            return;
+        }
+
+
+        const style = document.createElement('style');
+
+        style.id = 'tm-codex-blackout-style';
+
+        style.textContent = `
+
+            .${BLACKOUT_CLASS} {
+                color: transparent !important;
+                background: #000 !important;
+                text-shadow: none !important;
+
+                border-radius: 0 !important;
+
+                user-select: none !important;
+                -webkit-user-select: none !important;
+            }
+
+
+            .${BLACKOUT_CLASS} * {
+                color: transparent !important;
+                text-shadow: none !important;
+            }
+
+        `;
+
+
+        document.head.appendChild(style);
+    }
+
+
+
+    // =========================================================
+    // BLACK OUT AN ELEMENT
+    // =========================================================
+
+    function blackoutElement(el) {
+
+        if (!el) {
+            return;
+        }
+
+
+        if (
+            el.classList &&
+            el.classList.contains(BLACKOUT_CLASS)
+        ) {
+            return;
+        }
+
+
+        el.classList.add(
+            BLACKOUT_CLASS
+        );
+
+
+        /*
+         * Preserve the physical size of the text, but make the
+         * visible result a solid black block.
+         */
+
+        el.style.setProperty(
+            'color',
+            'transparent',
+            'important'
+        );
+
+
+        el.style.setProperty(
+            'background',
+            '#000',
+            'important'
+        );
+
+
+        el.style.setProperty(
+            'text-shadow',
+            'none',
+            'important'
+        );
+    }
+
+
+
+    // =========================================================
+    // FIND + BLACK OUT TARGET TEXT
+    // =========================================================
+
+    function blackoutTargetText(root = document.body) {
+
+        if (!root) {
+            return;
+        }
+
+
+        const walker =
+            document.createTreeWalker(
+                root,
+                NodeFilter.SHOW_TEXT,
+                {
+                    acceptNode(node) {
+
+                        if (
+                            !node.nodeValue ||
+                            !node.nodeValue.includes(TARGET_TEXT)
+                        ) {
+                            return NodeFilter.FILTER_REJECT;
+                        }
+
+
+                        const parent =
+                            node.parentElement;
+
+
+                        if (!parent) {
+                            return NodeFilter.FILTER_REJECT;
+                        }
+
+
+                        const tag =
+                            parent.tagName?.toLowerCase();
+
+
+                        if (
+                            [
+                                'script',
+                                'style',
+                                'noscript'
+                            ].includes(tag)
+                        ) {
+                            return NodeFilter.FILTER_REJECT;
+                        }
+
+
+                        return NodeFilter.FILTER_ACCEPT;
+                    }
+                }
+            );
+
+
+        const matches = [];
+
+
+        while (walker.nextNode()) {
+
+            matches.push(
+                walker.currentNode
+            );
+        }
+
+
+
+        for (const textNode of matches) {
+
+            const parent =
+                textNode.parentElement;
+
+
+            /*
+             * If the element contains ONLY the target phrase,
+             * black out the whole element.
+             */
+
+            if (
+                parent &&
+                parent.textContent.trim() === TARGET_TEXT
+            ) {
+
+                blackoutElement(
+                    parent
+                );
+
+                continue;
+            }
+
+
+
+            /*
+             * Otherwise, only replace the matching phrase.
+             *
+             * This protects us if Codex later puts the phrase
+             * inside a longer sentence.
+             */
+
+            const parts =
+                textNode.nodeValue.split(
+                    TARGET_TEXT
+                );
+
+
+            const fragment =
+                document.createDocumentFragment();
+
+
+            parts.forEach(
+                (part, index) => {
+
+                    if (part) {
+
+                        fragment.appendChild(
+                            document.createTextNode(
+                                part
+                            )
+                        );
+                    }
+
+
+                    if (
+                        index <
+                        parts.length - 1
+                    ) {
+
+                        const span =
+                            document.createElement(
+                                'span'
+                            );
+
+
+                        span.className =
+                            BLACKOUT_CLASS;
+
+
+                        span.textContent =
+                            TARGET_TEXT;
+
+
+                        fragment.appendChild(
+                            span
+                        );
+                    }
+                }
+            );
+
+
+            textNode.replaceWith(
+                fragment
+            );
+        }
+
+
+
+        // -----------------------------------------------------
+        // INPUT / TEXTAREA PLACEHOLDER FALLBACK
+        // -----------------------------------------------------
+
+        document
+            .querySelectorAll(
+                'input, textarea'
+            )
+            .forEach(field => {
+
+                if (
+                    field.placeholder ===
+                    TARGET_TEXT
+                ) {
+
+                    field.placeholder = '';
+
+
+                    field.style.setProperty(
+                        'background',
+                        '#000',
+                        'important'
+                    );
+                }
+            });
+    }
+
+
+
+    // =========================================================
+    // FIND THE CODEX TEXT ENTRY FIELD
+    // =========================================================
+
+    function findComposer() {
+
+        const candidates =
+            document.querySelectorAll(
+                'textarea, input, [contenteditable="true"], [role="textbox"]'
+            );
+
+
+        for (const el of candidates) {
+
+            const text = [
+
+                el.getAttribute(
+                    'placeholder'
+                ),
+
+                el.getAttribute(
+                    'aria-label'
+                ),
+
+                el.textContent
+
+            ]
+                .filter(Boolean)
+                .join(' ')
+                .toLowerCase();
+
+
+            if (
+                text.includes(
+                    'describe a task'
+                ) ||
+
+                text.includes(
+                    'ask a question'
+                ) ||
+
+                text.includes(
+                    '/plan'
+                )
+            ) {
+
+                return el;
+            }
+        }
+
+
+        return null;
+    }
+
+
+
+    // =========================================================
+    // FIND MAIN CODEX WORKSPACE
+    //
+    // Diagnostic previously identified:
+    //
+    //     div.z-0.mx-auto
+    //
+    // =========================================================
+
+    function findWorkspace() {
+
+        const composer =
+            findComposer();
+
+
+        if (!composer) {
+
+            return null;
+        }
+
+
+        let el =
+            composer;
+
+
+        while (
+            el &&
+            el !== document.body &&
+            el !== document.documentElement
+        ) {
+
+            if (
+                el.classList &&
+                el.classList.contains(
+                    'z-0'
+                ) &&
+                el.classList.contains(
+                    'mx-auto'
+                )
+            ) {
+
+                return el;
+            }
+
+
+            el =
+                el.parentElement;
+        }
+
+
+        return null;
+    }
+
+
+
+    // =========================================================
+    // ADJUST CODEX WORKSPACE
+    // =========================================================
+
+    function adjustWorkspace() {
+
+        const workspace =
+            findWorkspace();
+
+
+        if (!workspace) {
+
+            return;
+        }
+
+
+
+        // -----------------------------------------------------
+        // REMEMBER ORIGINAL WIDTH
+        // -----------------------------------------------------
+
+        if (
+            !workspace.dataset.codexOriginalWidth
+        ) {
+
+            const originalWidth =
+                workspace
+                    .getBoundingClientRect()
+                    .width;
+
+
+            workspace.dataset.codexOriginalWidth =
+                String(
+                    originalWidth
+                );
+        }
+
+
+
+        const originalWidth =
+            parseFloat(
+                workspace.dataset.codexOriginalWidth
+            );
+
+
+        if (
+            !originalWidth ||
+            isNaN(originalWidth)
+        ) {
+
+            return;
+        }
+
+
+
+        // -----------------------------------------------------
+        // CALCULATE NEW WIDTH
+        // -----------------------------------------------------
+
+        const requestedWidth =
+            originalWidth *
+            WIDTH_MULTIPLIER;
+
+
+        const maximumWidth =
+            window.innerWidth *
+            MAX_VIEWPORT_WIDTH;
+
+
+        const finalWidth =
+            Math.min(
+                requestedWidth,
+                maximumWidth
+            );
+
+
+
+        // -----------------------------------------------------
+        // APPLY WIDTH
+        // -----------------------------------------------------
+
+        workspace.style.setProperty(
+            'width',
+            `${finalWidth}px`,
+            'important'
+        );
+
+
+        workspace.style.setProperty(
+            'max-width',
+            `${finalWidth}px`,
+            'important'
+        );
+
+
+        workspace.style.setProperty(
+            'min-width',
+            '0',
+            'important'
+        );
+
+
+        workspace.style.setProperty(
+            'margin-left',
+            'auto',
+            'important'
+        );
+
+
+        workspace.style.setProperty(
+            'margin-right',
+            'auto',
+            'important'
+        );
+
+
+
+        // -----------------------------------------------------
+        // MOVE WORKSPACE UP
+        // -----------------------------------------------------
+
+        workspace.style.setProperty(
+            'transform',
+            `translateY(-${TOP_SHIFT_PX}px)`,
+            'important'
+        );
+
+
+
+        // -----------------------------------------------------
+        // REMOVE OLD INNER WIDTH RESTRICTIONS
+        // -----------------------------------------------------
+
+        const descendants =
+            workspace.querySelectorAll(
+                'div, section, form'
+            );
+
+
+        descendants.forEach(
+            el => {
+
+                const rect =
+                    el.getBoundingClientRect();
+
+
+                /*
+                 * Elements still approximately equal to the
+                 * original 768px width are allowed to expand
+                 * to the new workspace width.
+                 */
+
+                if (
+                    rect.width >=
+                        originalWidth - 5 &&
+
+                    rect.width <=
+                        originalWidth + 5
+                ) {
+
+                    el.style.setProperty(
+                        'max-width',
+                        '100%',
+                        'important'
+                    );
+
+
+                    el.style.setProperty(
+                        'width',
+                        '100%',
+                        'important'
+                    );
+                }
+            }
+        );
+    }
+
+
+
+    // =========================================================
+    // HIDE CHATGPT TOP HEADER
+    //
+    // Uses the geometry-based method that worked reliably.
+    // =========================================================
+
+    function hideHeader() {
+
+        /*
+         * These coordinates sit inside the ChatGPT header
+         * near the upper-left corner.
+         */
+
+        const samplePoints = [
+
+            [25, 25],
+
+            [60, 25],
+
+            [120, 25]
+
+        ];
+
+
+
+        for (
+            const [x, y]
+            of samplePoints
+        ) {
+
+            let el =
+                document.elementFromPoint(
+                    x,
+                    y
+                );
+
+
+            /*
+             * Start with whatever exists at that screen position
+             * and walk upward until we find the full header row.
+             */
+
+            while (
+                el &&
+                el !== document.body &&
+                el !== document.documentElement
+            ) {
+
+                const rect =
+                    el.getBoundingClientRect();
+
+
+
+                const startsAtTop =
+
+                    rect.top >= -5 &&
+
+                    rect.top <= 8;
+
+
+
+                const headerSized =
+
+                    rect.height >= 35 &&
+
+                    rect.height <= 90;
+
+
+
+                const spansScreen =
+
+                    rect.width >=
+
+                    window.innerWidth *
+                    0.90;
+
+
+
+                if (
+                    startsAtTop &&
+                    headerSized &&
+                    spansScreen
+                ) {
+
+                    el.style.setProperty(
+                        'display',
+                        'none',
+                        'important'
+                    );
+
+
+                    return;
+                }
+
+
+                el =
+                    el.parentElement;
+            }
+        }
+    }
+
+
+
+    // =========================================================
+    // APPLY EVERYTHING
+    // =========================================================
+
+    function applyTweaks() {
+
+        installBlackoutCSS();
+
+        hideHeader();
+
+        adjustWorkspace();
+
+        blackoutTargetText();
+    }
+
+
+
+    // =========================================================
+    // INITIAL PAGE LOAD
+    //
+    // Codex renders in several stages.
+    // =========================================================
+
+    setTimeout(
+        applyTweaks,
+        100
+    );
+
+
+    setTimeout(
+        applyTweaks,
+        500
+    );
+
+
+    setTimeout(
+        applyTweaks,
+        1000
+    );
+
+
+    setTimeout(
+        applyTweaks,
+        2000
+    );
+
+
+
+    // =========================================================
+    // REACT / CODEX MUTATION WATCHER
+    //
+    // One observer handles BOTH:
+    //
+    // - interface layout
+    // - blackout text
+    //
+    // This avoids running two separate Tampermonkey observers.
+    // =========================================================
+
+    let updateTimer;
+
+
+    const observer =
+        new MutationObserver(() => {
+
+            clearTimeout(
+                updateTimer
+            );
+
+
+            updateTimer =
+                setTimeout(
+                    applyTweaks,
+                    120
+                );
+        });
+
+
+
+    observer.observe(
+        document.body,
+        {
+
+            childList: true,
+
+            subtree: true,
+
+            characterData: true
+
+        }
+    );
+
+
+
+    // =========================================================
+    // HANDLE BROWSER RESIZING
+    // =========================================================
+
+    window.addEventListener(
+        'resize',
+        () => {
+
+            clearTimeout(
+                updateTimer
+            );
+
+
+            updateTimer =
+                setTimeout(
+                    applyTweaks,
+                    150
+                );
+        }
+    );
+
+})();
