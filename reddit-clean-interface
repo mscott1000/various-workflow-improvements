@@ -1,0 +1,25 @@
+// ==UserScript==
+// @name         Reddit - Blank Out Wordmark
+// @namespace    reddit-cleanup
+// @version      1.0
+// @description  Hides the "reddit" wordmark in Reddit's top navigation while leaving the home link functional.
+// @match        https://www.reddit.com/*
+// @match        https://reddit.com/*
+// @grant        none
+// @run-at       document-start
+// ==/UserScript==
+
+(function () {
+    'use strict';
+
+    const style = document.createElement('style');
+
+    style.textContent = `
+        /* Hide the visible Reddit wordmark SVG */
+        #reddit-logo span.hidden.s\\:flex {
+            visibility: hidden !important;
+        }
+    `;
+
+    (document.head || document.documentElement).appendChild(style);
+})();
