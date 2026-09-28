@@ -1,10 +1,11 @@
 // ==UserScript==
-// @name         Codex - Compact Wider Interface + Blackout
+// @name         Codex - Compact Wider Interface + Safe Blackouts
 // @namespace    mason-codex-cleanup
-// @version      5.2
-// @description  Widens Codex, reduces excess top spacing, hides the header only on the Codex home screen, and blacks out selected Codex text.
-// @match        https://chatgpt.com/*
-// @match        https://*.chatgpt.com/*
+// @version      6.0
+// @description  Widens Codex, reduces excess spacing, blacks out selected text, and visually masks only the top-left branding area.
+// @match        https://chatgpt.com/codex*
+// @match        https://chatgpt.com/codex/cloud*
+// @match        https://chatgpt.com/*/codex*
 // @run-at       document-idle
 // @grant        none
 // ==/UserScript==
@@ -30,33 +31,55 @@
     /*
      * MOVE CODEX UP
      *
-     * Reduces the blank area above the home-page composer.
+     * Reduces the blank area above the main Codex composer.
      */
     const TOP_SHIFT_PX = 90;
 
 
     /*
-     * Maximum percentage of the browser window that the
-     * widened Codex workspace may occupy.
+     * Maximum percentage of browser width that the widened
+     * Codex workspace may occupy.
      */
     const MAX_VIEWPORT_WIDTH = 0.92;
 
 
     /*
-     * TEXT BLACKOUT
+     * TOP-LEFT VISUAL MASK
+     *
+     * This blacks out ONLY the branding area in the upper-left.
+     *
+     * It does NOT hide the header.
+     * It does NOT remove any React elements.
+     * It does NOT interfere with clicks.
+     *
+     * Adjust these two numbers if the branding area changes.
      */
-    const TARGET_TEXT = 'What should we code next?';
+    const TOP_LEFT_MASK_WIDTH = 240;
+    const TOP_LEFT_MASK_HEIGHT = 62;
+
+
+    /*
+     * TEXT TO BLACK OUT
+     */
+    const TARGET_TEXT =
+        'What should we code next?';
+
 
     const BLACKOUT_CLASS =
         'tm-codex-blackout-text';
+
 
     const BLACKOUT_STYLE_ID =
         'tm-codex-blackout-style';
 
 
+    const TOP_LEFT_MASK_ID =
+        'tm-codex-top-left-mask';
+
+
 
     // =========================================================
-    // BLACKOUT CSS
+    // INSTALL BLACKOUT CSS
     // =========================================================
 
     function installBlackoutCSS() {
@@ -79,6 +102,7 @@
 
 
         style.textContent = `
+
             .${BLACKOUT_CLASS} {
                 color: transparent !important;
                 background: #000 !important;
@@ -93,6 +117,7 @@
                 color: transparent !important;
                 text-shadow: none !important;
             }
+
         `;
 
 
@@ -104,7 +129,123 @@
 
 
     // =========================================================
-    // BLACK OUT ONE ELEMENT
+    // TOP-LEFT BRANDING MASK
+    //
+    // IMPORTANT:
+    //
+    // This is ONLY a visual rectangle.
+    //
+    // pointer-events: none
+    //
+    // means all underlying controls remain completely clickable.
+    //
+    // Nothing in the actual ChatGPT/Codex header DOM is removed.
+    // =========================================================
+
+    function installTopLeftMask() {
+
+        let mask =
+            document.getElementById(
+                TOP_LEFT_MASK_ID
+            );
+
+
+        if (!mask) {
+
+            mask =
+                document.createElement(
+                    'div'
+                );
+
+
+            mask.id =
+                TOP_LEFT_MASK_ID;
+
+
+            document.body.appendChild(
+                mask
+            );
+        }
+
+
+        mask.style.setProperty(
+            'position',
+            'fixed',
+            'important'
+        );
+
+
+        mask.style.setProperty(
+            'top',
+            '0',
+            'important'
+        );
+
+
+        mask.style.setProperty(
+            'left',
+            '0',
+            'important'
+        );
+
+
+        mask.style.setProperty(
+            'width',
+            `${TOP_LEFT_MASK_WIDTH}px`,
+            'important'
+        );
+
+
+        mask.style.setProperty(
+            'height',
+            `${TOP_LEFT_MASK_HEIGHT}px`,
+            'important'
+        );
+
+
+        mask.style.setProperty(
+            'background',
+            '#000',
+            'important'
+        );
+
+
+        /*
+         * Extremely high z-index ensures it visually covers
+         * the branding.
+         */
+        mask.style.setProperty(
+            'z-index',
+            '2147483647',
+            'important'
+        );
+
+
+        /*
+         * CRITICAL:
+         *
+         * The mask cannot capture mouse clicks.
+         *
+         * Anything underneath remains functional.
+         */
+        mask.style.setProperty(
+            'pointer-events',
+            'none',
+            'important'
+        );
+
+
+        mask.style.setProperty(
+            'user-select',
+            'none',
+            'important'
+        );
+    }
+
+
+
+    // =========================================================
+    // BLACK OUT AN ELEMENT
     // =========================================================
 
     function blackoutElement(el) {
@@ -127,11 +268,6 @@
             BLACKOUT_CLASS
         );
 
-
-        /*
-         * Preserve the element's normal dimensions,
-         * but show a solid black block instead of text.
-         */
 
         el.style.setProperty(
             'color',
@@ -157,7 +293,7 @@
 
 
     // =========================================================
-    // FIND + BLACK OUT:
+    // BLACK OUT:
     //
     // "What should we code next?"
     // =========================================================
@@ -193,6 +329,15 @@
 
 
                         if (!parent) {
+                            return NodeFilter.FILTER_REJECT;
+                        }
+
+
+                        if (
+                            parent.closest(
+                                `.${BLACKOUT_CLASS}`
+                            )
+                        ) {
                             return NodeFilter.FILTER_REJECT;
                         }
 
@@ -241,13 +386,11 @@
                 textNode.parentElement;
 
 
-            /*
-             * If the entire element is just:
-             *
-             * "What should we code next?"
-             *
-             * black out the whole element.
-             */
+
+            // -------------------------------------------------
+            // Entire element is the target phrase.
+            // -------------------------------------------------
+
             if (
                 parent &&
                 parent.textContent.trim() ===
@@ -263,10 +406,9 @@
 
 
 
-            /*
-             * If the target phrase is embedded inside
-             * some longer text, black out only the target.
-             */
+            // -------------------------------------------------
+            // Target phrase appears inside longer text.
+            // -------------------------------------------------
 
             const parts =
                 textNode.nodeValue.split(
@@ -326,10 +468,7 @@
 
 
         // -----------------------------------------------------
-        // PLACEHOLDER FALLBACK
-        //
-        // If Codex uses the phrase as a textarea/input
-        // placeholder instead of ordinary text.
+        // INPUT / TEXTAREA PLACEHOLDER FALLBACK
         // -----------------------------------------------------
 
         document
@@ -345,6 +484,7 @@
 
                     field.placeholder = '';
 
+
                     field.style.setProperty(
                         'background',
                         '#000',
@@ -357,7 +497,7 @@
 
 
     // =========================================================
-    // FIND THE CODEX TEXT ENTRY FIELD
+    // FIND CODEX COMPOSER
     // =========================================================
 
     function findComposer() {
@@ -371,6 +511,7 @@
         for (const el of candidates) {
 
             const text = [
+
                 el.getAttribute(
                     'placeholder'
                 ),
@@ -380,6 +521,7 @@
                 ),
 
                 el.textContent
+
             ]
                 .filter(Boolean)
                 .join(' ')
@@ -411,9 +553,9 @@
 
 
     // =========================================================
-    // FIND THE MAIN CODEX WORKSPACE
+    // FIND MAIN CODEX WORKSPACE
     //
-    // Diagnostic identified the home wrapper as:
+    // Previously identified through our diagnostic as:
     //
     // div.z-0.mx-auto
     // =========================================================
@@ -464,7 +606,7 @@
 
 
     // =========================================================
-    // WIDEN + MOVE THE CODEX HOME WORKSPACE
+    // WIDEN + MOVE CODEX WORKSPACE
     // =========================================================
 
     function adjustWorkspace() {
@@ -480,7 +622,7 @@
 
 
         // -----------------------------------------------------
-        // Remember original width once.
+        // Remember original width exactly once.
         // -----------------------------------------------------
 
         if (
@@ -582,7 +724,7 @@
 
 
         // -----------------------------------------------------
-        // Move the home workspace upward.
+        // REDUCE BLANK AREA ABOVE CODEX
         // -----------------------------------------------------
 
         workspace.style.setProperty(
@@ -594,7 +736,8 @@
 
 
         // -----------------------------------------------------
-        // Remove old inner 768px-style width limits.
+        // Remove original-width restrictions from inner
+        // Codex elements.
         // -----------------------------------------------------
 
         const descendants =
@@ -636,319 +779,35 @@
 
 
     // =========================================================
-    // DETERMINE WHETHER THIS IS THE CODEX HOME SCREEN
-    //
-    // Header hiding happens ONLY if we're confident this is
-    // the task-list/home page.
-    //
-    // Active coding tasks fail safe: header remains visible.
-    // =========================================================
-
-    function isCodexHomeScreen() {
-
-        const bodyText =
-            (
-                document.body
-                    ?.innerText || ''
-            )
-                .toLowerCase();
-
-
-
-        // -----------------------------------------------------
-        // HOME COMPOSER
-        // -----------------------------------------------------
-
-        const candidates =
-            document.querySelectorAll(
-                'textarea, input, [contenteditable="true"], [role="textbox"]'
-            );
-
-
-        let hasDescribeTaskComposer =
-            false;
-
-
-        for (const el of candidates) {
-
-            const text = [
-                el.getAttribute(
-                    'placeholder'
-                ),
-
-                el.getAttribute(
-                    'aria-label'
-                ),
-
-                el.textContent
-            ]
-                .filter(Boolean)
-                .join(' ')
-                .toLowerCase();
-
-
-            if (
-                text.includes(
-                    'describe a task'
-                )
-            ) {
-
-                hasDescribeTaskComposer =
-                    true;
-
-                break;
-            }
-        }
-
-
-
-        // -----------------------------------------------------
-        // HOME NAVIGATION
-        // -----------------------------------------------------
-
-        const hasHomeNavigation =
-            bodyText.includes(
-                'tasks'
-            ) &&
-            bodyText.includes(
-                'archive'
-            );
-
-
-
-        // -----------------------------------------------------
-        // SIGNS THAT AN ACTIVE TASK IS OPEN
-        // -----------------------------------------------------
-
-        const hasTaskTabs =
-            bodyText.includes(
-                'diff'
-            ) &&
-            bodyText.includes(
-                'logs'
-            );
-
-
-        const hasTaskReplyComposer =
-            bodyText.includes(
-                'request changes or ask a question'
-            );
-
-
-        const looksLikeActiveTask =
-            hasTaskTabs ||
-            hasTaskReplyComposer;
-
-
-
-        return (
-            hasDescribeTaskComposer &&
-            hasHomeNavigation &&
-            !looksLikeActiveTask
-        );
-    }
-
-
-
-    // =========================================================
-    // HEADER MANAGEMENT
-    //
-    // HOME:
-    //     hidden
-    //
-    // ACTIVE TASK:
-    //     visible
-    // =========================================================
-
-    let hiddenHeader = null;
-
-
-
-    function restoreHeader() {
-
-        if (
-            hiddenHeader &&
-            hiddenHeader.isConnected
-        ) {
-
-            /*
-             * Remove ONLY the property this script added.
-             */
-
-            hiddenHeader.style
-                .removeProperty(
-                    'display'
-                );
-        }
-
-
-        hiddenHeader = null;
-    }
-
-
-
-    function findTopHeader() {
-
-        /*
-         * Coordinates inside the ordinary ChatGPT
-         * top-left header.
-         */
-        const samplePoints = [
-            [25, 25],
-            [60, 25],
-            [120, 25]
-        ];
-
-
-        for (
-            const [x, y]
-            of samplePoints
-        ) {
-
-            let el =
-                document.elementFromPoint(
-                    x,
-                    y
-                );
-
-
-            while (
-                el &&
-                el !== document.body &&
-                el !== document.documentElement
-            ) {
-
-                const rect =
-                    el.getBoundingClientRect();
-
-
-                const startsAtTop =
-                    rect.top >= -5 &&
-                    rect.top <= 8;
-
-
-                const headerSized =
-                    rect.height >= 35 &&
-                    rect.height <= 90;
-
-
-                const spansScreen =
-                    rect.width >=
-                    window.innerWidth *
-                    0.90;
-
-
-                if (
-                    startsAtTop &&
-                    headerSized &&
-                    spansScreen
-                ) {
-
-                    return el;
-                }
-
-
-                el =
-                    el.parentElement;
-            }
-        }
-
-
-        return null;
-    }
-
-
-
-    function manageHeader() {
-
-        /*
-         * SAFETY RULE:
-         *
-         * Unless this is definitely the Codex HOME page,
-         * make sure the full header is restored.
-         */
-
-        if (
-            !isCodexHomeScreen()
-        ) {
-
-            restoreHeader();
-
-            return;
-        }
-
-
-
-        /*
-         * Already hidden.
-         *
-         * Do not search underneath it and accidentally
-         * identify some other top-screen element.
-         */
-
-        if (
-            hiddenHeader &&
-            hiddenHeader.isConnected
-        ) {
-
-            return;
-        }
-
-
-        hiddenHeader = null;
-
-
-
-        const header =
-            findTopHeader();
-
-
-        if (!header) {
-            return;
-        }
-
-
-        hiddenHeader =
-            header;
-
-
-        header.style.setProperty(
-            'display',
-            'none',
-            'important'
-        );
-    }
-
-
-
-    // =========================================================
-    // APPLY ALL CUSTOMIZATIONS
+    // APPLY EVERYTHING
     // =========================================================
 
     function applyTweaks() {
 
         /*
-         * 1. Ensure blackout CSS exists.
+         * CSS required for text blackout.
          */
         installBlackoutCSS();
 
 
         /*
-         * 2. Hide/restore header depending on page.
+         * Visually cover ONLY the upper-left branding area.
+         *
+         * No header elements are removed.
          */
-        manageHeader();
+        installTopLeftMask();
 
 
         /*
-         * 3. Widen and reposition home workspace.
+         * Widen and reposition Codex.
          */
         adjustWorkspace();
 
 
         /*
-         * 4. Black out:
+         * Black out:
          *
-         *    "What should we code next?"
+         * "What should we code next?"
          */
         blackoutTargetText();
     }
@@ -987,14 +846,7 @@
 
 
     // =========================================================
-    // REACT / CODEX REDRAWS
-    //
-    // One observer handles:
-    //
-    // - home/task navigation
-    // - header restore/hide
-    // - width changes
-    // - blackout text appearing dynamically
+    // WATCH FOR CODEX / REACT REDRAWS
     // =========================================================
 
     let updateTimer;
